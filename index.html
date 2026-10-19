@@ -4,13 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0b2a4a">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Loan Calculator">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="manifest" href="manifest.webmanifest">
-<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-<link rel="icon" type="image/png" href="icons/icon-192.png">
 <title>Staff &amp; NGO Loan Calculator By Gemechu Iticha</title>
 <style>
   :root{
@@ -192,6 +185,9 @@
           <label for="salary">Applicant Monthly Basic Salary (ETB)</label>
           <input id="salary" type="number" inputmode="decimal" min="0" step="any" placeholder="e.g. 20,000">
           <div class="hint">AB Bank staff: basic basis = &frac12; of basic salary minus fringe tax (10%); net basis = net salary after income tax, pension and fringe tax. NGO staff: no fringe tax.</div>
+          <label for="otherDed">Other Monthly Deductions (ETB, optional)</label>
+          <input id="otherDed" type="number" inputmode="decimal" min="0" step="any" placeholder="e.g. 1,500 (leave blank if none)">
+          <div class="hint">Any other deduction entered manually, such as a loan repayment or a saving. It is subtracted when working out repayment capacity, for every loan product and borrower category.</div>
         </div>
         <div id="payGroup" hidden>
           <label for="pay">Repayment Amount per Installment (ETB)</label>
@@ -267,7 +263,7 @@
   Interest is calculated on a reducing-balance (annuity) basis: rate per period = annual rate &times; (months per period &divide; 12).
   Maximum tenure: HL 25 years, PL 5 years, CL 15 years, and never beyond retirement at age 60.
   Salary basis: repayment capacity = &frac12; of monthly basic salary (less fringe tax for AB Bank staff), or the full net salary; net salary = basic &minus; income tax (35% &minus; 2,050) &minus; pension (7%) &minus; fringe tax (10%, AB Bank staff only).
-  Spouse income is added as &frac12; of spouse basic salary &times; share considered.
+  Other deductions entered manually are subtracted from the applicant's repayment capacity (net salary on the net basis). Spouse income is added as &frac12; of spouse basic salary &times; share considered.
   Figures are for appraisal guidance; confirm against current bank policy.
 </footer>
 
@@ -409,12 +405,15 @@
     }else{
       const basic = parseFloat($('salary').value);
       if(isNaN(basic) || basic<=0){ err.textContent='Enter a valid basic salary.'; return; }
+      const other = parseFloat($('otherDed').value) || 0;   // other deductions, entered manually (blank = 0)
+      if(other<0){ err.textContent='Other deductions cannot be negative.'; return; }
       const tax = Math.max(0, basic*0.35 - 2050);   // income tax = 35% of basic - 2,050
       const pension = basic*0.07;                    // pension = 7% of basic
       const fringe = isNGO ? 0 : basic*0.10;         // fringe tax = 10% of basic (AB Bank staff only)
-      const net = basic - tax - pension - fringe;
+      const net = basic - tax - pension - fringe - other;
       if((basis==='basic' ? basic : net)<=0){ err.textContent='Net salary is zero or negative; no repayment capacity.'; return; }
-      const ownCap = basis==='basic' ? basic/2 - fringe : net;
+      const ownCap = basis==='basic' ? basic/2 - fringe - other : net;   // other deductions reduce the capacity on both bases
+      if(ownCap<=0){ err.textContent='Repayment capacity is zero or negative after deductions. Check the other deductions entered.'; return; }
 
       let spRows='', spCap=0;
       if($('spouseOn').checked){
@@ -435,8 +434,9 @@
          <tr><td>Income Tax (35% &minus; 2,050)</td><td>ETB ${fmt(tax)}</td></tr>
          <tr><td>Pension (7%)</td><td>ETB ${fmt(pension)}</td></tr>
          <tr><td>Fringe Tax ${isNGO?'(not applicable)':'(10%)'}</td><td>ETB ${fmt(fringe)}</td></tr>
+         <tr><td>Other Deductions</td><td>ETB ${fmt(other)}</td></tr>
          <tr><td>Net Salary</td><td>ETB ${fmt(net)}</td></tr>
-         <tr><td>Capacity Basis</td><td>${basis==='basic'?(isNGO?'&frac12; Basic Salary':'&frac12; Basic Salary &minus; Fringe Tax'):'Net Salary (full)'}</td></tr>
+         <tr><td>Capacity Basis</td><td>${basis==='basic'?('&frac12; Basic Salary'+(isNGO?'':' &minus; Fringe Tax')+(other>0?' &minus; Other Deductions':'')):'Net Salary (full)'}</td></tr>
          <tr><td>Applicant Monthly Capacity</td><td>ETB ${fmt(ownCap)}</td></tr>
          ${spRows}
          <tr><td>Total Monthly Repayment Capacity</td><td>ETB ${fmt(monthlyCap)}</td></tr>`;
@@ -526,7 +526,7 @@
   $('calc').onclick = calculate;
   document.addEventListener('keydown',e=>{ if(e.key==='Enter' && e.target.tagName!=='SELECT') calculate(); });
   $('reset').onclick = ()=>{
-    $('salary').value=''; $('pay').value=''; $('basis').value='basic'; $('category').value='ab';
+    $('salary').value=''; $('otherDed').value=''; $('pay').value=''; $('basis').value='basic'; $('category').value='ab';
     $('product').value=''; $('dob').value=''; $('spouseOn').checked=false; $('spBasic').value=''; $('spWeight').value=100;
     $('spouseGroup').hidden=true; applyBasis();
     $('rate').value=14; $('mode').value=1; refreshLimits(true);
@@ -535,11 +535,6 @@
   };
   refreshLimits(true);
 })();
-</script>
-<script>
-if('serviceWorker' in navigator && location.protocol.indexOf('http')===0){
-  window.addEventListener('load',function(){ navigator.serviceWorker.register('sw.js').catch(function(){}); });
-}
 </script>
 </body>
 </html>
